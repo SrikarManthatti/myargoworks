@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: abc-
+  namespace: test
+spec:
+  entrypoint: main
+  parallelism: 10
+  templates:
+  - name: main
+    steps:
+    - - name: create-dataframe
+        template: create-dataframe
+    - - name: run-parallel
+        template: run-parallel
+        arguments:
+          parameters:
+          - name: ls_val
+            value: "{{item}}"
+        withParam: "{{steps.create-dataframe.outputs.parameters.list_vals}}"
+  - name: create-dataframe
+    script: 
+      image: python-pandas:1
+      command: [python]
+      source: |
+        import pandas as pd
+        data = {"col1": range(1,6), 'col2': range(11,16), 'col3': range(21,26)}
+        df = pd.DataFrame(data)
+        ls = df['col1'].unique().tolist()
+        with open('/tmp/output.txt', 'w') as file:
+            file.write(str(ls))
+        print(f"inside first {ls}")
+    outputs: 
+      parameters:
+      - name: list_vals
+        valueFrom:
+          path: '/tmp/output.txt'
+  - name: run-parallel
+    inputs:
+      parameters:
+      - name: ls_val
+    script:
+      image: python-pandas:1
+      command: [python]
+      source: |
+        import pandas as pd
+        ls_val = {{inputs.parameters.ls_val}}
+        data = {"col1": range(1,6), 'col2': range(11,16), 'col3': range(21,26)}
+        df = pd.DataFrame(data)
+        print(f"value in list {ls_val}")
+        sub_df = df[df['col1']==ls_val]
+        print(sub_df)
